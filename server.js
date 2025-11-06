@@ -3,7 +3,14 @@ const { Pool } = require('pg');
 const cors = require('cors');
 
 const app = express();
-app.use(cors());
+
+// Правильная настройка CORS
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'DELETE', 'PUT'],
+    credentials: true
+}));
+
 app.use(express.json());
 
 // Подключение к PostgreSQL
@@ -63,7 +70,7 @@ async function initDatabase() {
 // Инициализация базы при запуске
 initDatabase();
 
-// 👥 ВАШИ СУЩЕСТВУЮЩИЕ РОУТЫ ДЛЯ VIEWERS (не меняем)
+// 👥 ВАШИ СУЩЕСТВУЮЩИЕ РОУТЫ ДЛЯ VIEWERS
 
 // Получить всех зрителей
 app.get('/viewers', async (req, res) => {
@@ -103,6 +110,34 @@ app.get('/viewers/check/:name', async (req, res) => {
     }
 });
 
+// 🔧 ИСПРАВЛЕННЫЙ РОУТ - Удалить конкретного пользователя по имени
+app.delete('/viewers/:name', async (req, res) => {
+    const { name } = req.params;
+    console.log(`🗑️ DELETE request for viewer: ${name}`);
+
+    try {
+        // Декодируем имя из URL
+        const decodedName = decodeURIComponent(name);
+        console.log(`🔍 Searching for viewer: ${decodedName}`);
+        
+        const result = await pool.query('DELETE FROM viewers WHERE name = $1', [decodedName]);
+        console.log(`✅ Viewer deleted: ${decodedName}, affected rows: ${result.rowCount}`);
+        
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Пользователь не найден' });
+        }
+        
+        res.json({ 
+            message: 'Просмотр удален', 
+            deletedCount: result.rowCount,
+            deletedName: decodedName 
+        });
+    } catch (error) {
+        console.error(`❌ Error deleting viewer ${name}:`, error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Удалить все данные viewers
 app.delete('/viewers', async (req, res) => {
     try {
@@ -114,7 +149,7 @@ app.delete('/viewers', async (req, res) => {
     }
 });
 
-// 🔐 НОВЫЕ РОУТЫ ДЛЯ ПАРОЛЕЙ (добавляем)
+// 🔐 НОВЫЕ РОУТЫ ДЛЯ ПАРОЛЕЙ
 
 // Получить все пароли
 app.get('/passwords', async (req, res) => {
@@ -210,6 +245,11 @@ app.delete('/passwords', async (req, res) => {
 // Проверка здоровья сервера
 app.get('/health', (req, res) => {
     res.json({ status: 'OK', message: 'Сервер работает' });
+});
+
+// Корневой маршрут
+app.get('/', (req, res) => {
+    res.json({ message: 'Сервер видеоИнструктажа запущен' });
 });
 
 const PORT = process.env.PORT || 3000;
