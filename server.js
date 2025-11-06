@@ -75,7 +75,9 @@ initDatabase();
 // Получить всех зрителей
 app.get('/viewers', async (req, res) => {
     try {
+        console.log("📋 GET /viewers - получение всех записей");
         const result = await pool.query('SELECT * FROM viewers ORDER BY created_at DESC');
+        console.log(`✅ Найдено записей: ${result.rows.length}`);
         res.json(result.rows);
     } catch (error) {
         console.error("❌ Ошибка получения viewers:", error);
@@ -86,12 +88,14 @@ app.get('/viewers', async (req, res) => {
 // Добавить зрителя
 app.post('/viewers', async (req, res) => {
     const { name, startTime, endTime, watchDuration, completed, watchedFully } = req.body;
+    console.log(`➕ POST /viewers - добавление: ${name}`);
     
     try {
         const result = await pool.query(
             'INSERT INTO viewers (name, start_time, end_time, watch_duration, completed, watched_fully) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
             [name, startTime, endTime, watchDuration, completed, watchedFully]
         );
+        console.log(`✅ Добавлен viewer: ${name}`);
         res.json(result.rows[0]);
     } catch (error) {
         console.error("❌ Ошибка добавления viewer:", error);
@@ -101,8 +105,12 @@ app.post('/viewers', async (req, res) => {
 
 // Проверить, смотрел ли пользователь
 app.get('/viewers/check/:name', async (req, res) => {
+    const name = req.params.name;
+    console.log(`🔍 GET /viewers/check/${name} - проверка`);
+    
     try {
-        const result = await pool.query('SELECT * FROM viewers WHERE name = $1 AND completed = true', [req.params.name]);
+        const result = await pool.query('SELECT * FROM viewers WHERE name = $1 AND completed = true', [name]);
+        console.log(`✅ Проверка ${name}: ${result.rows.length > 0 ? 'найден' : 'не найден'}`);
         res.json({ watched: result.rows.length > 0 });
     } catch (error) {
         console.error("❌ Ошибка проверки viewer:", error);
@@ -113,19 +121,25 @@ app.get('/viewers/check/:name', async (req, res) => {
 // 🔧 ИСПРАВЛЕННЫЙ РОУТ - Удалить конкретного пользователя по имени
 app.delete('/viewers/:name', async (req, res) => {
     const { name } = req.params;
-    console.log(`🗑️ DELETE request for viewer: ${name}`);
+    console.log(`🗑️ DELETE /viewers/${name} - запрос на удаление`);
 
     try {
         // Декодируем имя из URL
         const decodedName = decodeURIComponent(name);
-        console.log(`🔍 Searching for viewer: ${decodedName}`);
+        console.log(`🔍 Декодированное имя: ${decodedName}`);
         
-        const result = await pool.query('DELETE FROM viewers WHERE name = $1', [decodedName]);
-        console.log(`✅ Viewer deleted: ${decodedName}, affected rows: ${result.rowCount}`);
+        // Сначала проверим существует ли такой пользователь
+        const checkResult = await pool.query('SELECT * FROM viewers WHERE name = $1', [decodedName]);
+        console.log(`🔍 Найдено записей с именем ${decodedName}: ${checkResult.rows.length}`);
         
-        if (result.rowCount === 0) {
-            return res.status(404).json({ error: 'Пользователь не найден' });
+        if (checkResult.rows.length === 0) {
+            console.log(`❌ Пользователь ${decodedName} не найден в базе`);
+            return res.status(404).json({ error: 'Пользователь не найден', searchedName: decodedName });
         }
+        
+        // Удаляем пользователя
+        const result = await pool.query('DELETE FROM viewers WHERE name = $1', [decodedName]);
+        console.log(`✅ Пользователь удален: ${decodedName}, затронуто строк: ${result.rowCount}`);
         
         res.json({ 
             message: 'Просмотр удален', 
@@ -133,7 +147,7 @@ app.delete('/viewers/:name', async (req, res) => {
             deletedName: decodedName 
         });
     } catch (error) {
-        console.error(`❌ Error deleting viewer ${name}:`, error);
+        console.error(`❌ Ошибка удаления viewer ${name}:`, error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -141,8 +155,10 @@ app.delete('/viewers/:name', async (req, res) => {
 // Удалить все данные viewers
 app.delete('/viewers', async (req, res) => {
     try {
-        await pool.query('DELETE FROM viewers');
-        res.json({ message: 'Все данные viewers удалены' });
+        console.log("🗑️ DELETE /viewers - удаление всех данных");
+        const result = await pool.query('DELETE FROM viewers');
+        console.log(`✅ Удалено всех записей: ${result.rowCount}`);
+        res.json({ message: 'Все данные viewers удалены', deletedCount: result.rowCount });
     } catch (error) {
         console.error("❌ Ошибка удаления viewers:", error);
         res.status(500).json({ error: error.message });
@@ -154,7 +170,9 @@ app.delete('/viewers', async (req, res) => {
 // Получить все пароли
 app.get('/passwords', async (req, res) => {
     try {
+        console.log("🔐 GET /passwords - получение всех паролей");
         const result = await pool.query('SELECT * FROM passwords ORDER BY id');
+        console.log(`✅ Найдено паролей: ${result.rows.length}`);
         res.json(result.rows);
     } catch (error) {
         console.error("❌ Ошибка получения паролей:", error);
@@ -165,6 +183,7 @@ app.get('/passwords', async (req, res) => {
 // Добавить новый пароль
 app.post('/passwords', async (req, res) => {
     const { password } = req.body;
+    console.log(`➕ POST /passwords - добавление пароля`);
     
     if (!password) {
         return res.status(400).json({ error: 'Пароль обязателен' });
@@ -175,9 +194,11 @@ app.post('/passwords', async (req, res) => {
             'INSERT INTO passwords (password) VALUES ($1) RETURNING *',
             [password]
         );
+        console.log(`✅ Добавлен пароль: ${password}`);
         res.json(result.rows[0]);
     } catch (error) {
         if (error.code === '23505') {
+            console.log(`❌ Пароль уже существует: ${password}`);
             return res.status(400).json({ error: 'Пароль уже существует' });
         }
         console.error("❌ Ошибка добавления пароля:", error);
@@ -188,6 +209,7 @@ app.post('/passwords', async (req, res) => {
 // Удалить пароль
 app.delete('/passwords/:id', async (req, res) => {
     const { id } = req.params;
+    console.log(`🗑️ DELETE /passwords/${id} - удаление пароля`);
 
     try {
         // Проверяем сколько паролей останется
@@ -195,10 +217,12 @@ app.delete('/passwords/:id', async (req, res) => {
         const passwordCount = parseInt(countResult.rows[0].count);
 
         if (passwordCount <= 1) {
+            console.log(`❌ Нельзя удалить все пароли (осталось: ${passwordCount})`);
             return res.status(400).json({ error: 'Нельзя удалить все пароли' });
         }
 
         await pool.query('DELETE FROM passwords WHERE id = $1', [id]);
+        console.log(`✅ Пароль удален ID: ${id}`);
         res.json({ message: 'Пароль удален' });
     } catch (error) {
         console.error("❌ Ошибка удаления пароля:", error);
@@ -209,6 +233,7 @@ app.delete('/passwords/:id', async (req, res) => {
 // Проверить пароль
 app.post('/passwords/check', async (req, res) => {
     const { password } = req.body;
+    console.log(`🔍 POST /passwords/check - проверка пароля`);
 
     if (!password) {
         return res.status(400).json({ error: 'Пароль обязателен' });
@@ -220,6 +245,8 @@ app.post('/passwords/check', async (req, res) => {
             [password]
         );
 
+        console.log(`✅ Проверка пароля ${password}: ${result.rows.length > 0 ? 'валиден' : 'невалиден'}`);
+        
         if (result.rows.length > 0) {
             res.json({ valid: true });
         } else {
@@ -234,7 +261,9 @@ app.post('/passwords/check', async (req, res) => {
 // Удалить все пароли
 app.delete('/passwords', async (req, res) => {
     try {
+        console.log("🗑️ DELETE /passwords - удаление всех паролей");
         await pool.query('DELETE FROM passwords');
+        console.log(`✅ Все пароли удалены`);
         res.json({ message: 'Все пароли удалены' });
     } catch (error) {
         console.error("❌ Ошибка удаления паролей:", error);
@@ -244,15 +273,24 @@ app.delete('/passwords', async (req, res) => {
 
 // Проверка здоровья сервера
 app.get('/health', (req, res) => {
+    console.log("❤️ GET /health - проверка здоровья");
     res.json({ status: 'OK', message: 'Сервер работает' });
 });
 
 // Корневой маршрут
 app.get('/', (req, res) => {
+    console.log("🏠 GET / - корневой маршрут");
     res.json({ message: 'Сервер видеоИнструктажа запущен' });
+});
+
+// Логирование всех запросов
+app.use((req, res, next) => {
+    console.log(`📍 ${new Date().toISOString()} ${req.method} ${req.url}`);
+    next();
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`✅ Сервер запущен на порту ${PORT}`);
+    console.log(`🌐 Доступен по адресу: http://localhost:${PORT}`);
 });
